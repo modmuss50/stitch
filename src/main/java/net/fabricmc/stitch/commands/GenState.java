@@ -96,10 +96,23 @@ class GenState {
         return (m.getName().length() <= 2 || (m.getName().length() == 3 && m.getName().charAt(2) == '_')) && m.getName().charAt(0) != '<' && m.isSource(storage, c);
     }
 
+	//Checks to see if most of the fields in the class are mapped, if so we **assume** that this field can be skipped
+	private static boolean isMostlyMappedClass(ClassStorage storage, JarClassEntry c, AbstractJarEntry e){
+		long fields = c.getFields().size();
+		long debofFields = c.getFields().stream()
+			.filter(entry -> !isMappedField(storage, c, entry))
+			.count();
+		boolean skip = fields > 3 && (((double)fields - (double)debofFields) / (double)fields) < 0.15;
+		if(skip){
+			System.out.println(String.format("Skipping mapping in: %s.%s (%d/%d)", c.getName(), e.getName(), fields, debofFields));
+		}
+		return skip;
+	}
+
     @Nullable
     private String getFieldName(ClassStorage storage, JarClassEntry c, JarFieldEntry f) {
-        if (!isMappedField(storage, c, f)) {
-            return null;
+        if (!isMappedField(storage, c, f) || isMostlyMappedClass(storage, c, f)) {
+            return f.getName();
         }
 
         if (newToIntermediary != null) {
@@ -230,7 +243,10 @@ class GenState {
     @Nullable
     private String getMethodName(ClassStorage storageOld, ClassStorage storageNew, JarClassEntry c, JarMethodEntry m) {
         if (!isMappedMethod(storageNew, c, m)) {
-            return null;
+        	if(m.getName().startsWith("<") || !m.isSource(storageNew, c)){
+        		return null;
+	        }
+            return m.getName();
         }
 
         if (methodNames.containsKey(m)) {
